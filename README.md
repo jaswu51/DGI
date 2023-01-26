@@ -1,5 +1,9 @@
 # This repo has extended DGI from GCN embeddings to GAT embeddings
 
+We will see the edge has been allowed for 2-dimension features.
+
+
+And the GAT has benefited from the multi-head attention algorithms.
 # DGI
 Deep Graph Infomax (Veličković *et al.*, ICLR 2019): [https://arxiv.org/abs/1809.10341](https://arxiv.org/abs/1809.10341)
 
