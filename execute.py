@@ -5,145 +5,66 @@ import torch.nn as nn
 
 from models import DGI, LogReg
 from utils import process
+from utils.sampleData import KarateDataset,KarateDatasetCorrupt
 
-dataset = 'cora'
+import torch.nn.functional as F
+
+
+
+data=KarateDataset()[0]
+data_corrupt=KarateDatasetCorrupt()[0]
+
+
 
 # training params
 batch_size = 1
-nb_epochs = 10000
 patience = 20
 lr = 0.001
 l2_coef = 0.0
 drop_prob = 0.0
-hid_units = 512
+hid_units = 36
 sparse = True
 nonlinearity = 'prelu' # special name to separate parameters
+nb_classes=2
 
-adj, features, labels, idx_train, idx_val, idx_test = process.load_data(dataset)
-features, _ = process.preprocess_features(features)
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+data =  data.to(device)
+data_corrupt=data
+model = DGI(in_channels=data.num_node_features, hidden_channels=hid_units,out_channels=16,heads=3,edge_dim=data.edge_dim).to(device) 
 
-nb_nodes = features.shape[0]
-ft_size = features.shape[1]
-nb_classes = labels.shape[1]
 
-adj = process.normalize_adj(adj + sp.eye(adj.shape[0]))
+optimizer_name = "Adam"
+lr = 1e-1
+optimizer = getattr(torch.optim, optimizer_name)(model.parameters(), lr=lr)
+epochs = 200
+loss=nn.BCELoss()
 
-if sparse:
-    sp_adj = process.sparse_mx_to_torch_sparse_tensor(adj)
-else:
-    adj = (adj + sp.eye(adj.shape[0])).todense()
+mask_train = torch.cat((data.train_mask,data.train_mask),0).type(torch.LongTensor)
+mask_test = torch.cat((data.test_mask,data.test_mask),0).type(torch.LongTensor)
+label=torch.cat((torch.ones(40), torch.zeros(40)), 0)
+label_train=label[mask_train]
+label_test=label[mask_test]
+def train():
+  model.train()
+  optimizer.zero_grad()
+  loss(model(data,data_corrupt)[mask_train], label_train).backward()
+  optimizer.step()
 
-features = torch.FloatTensor(features[np.newaxis])
-if not sparse:
-    adj = torch.FloatTensor(adj[np.newaxis])
-labels = torch.FloatTensor(labels[np.newaxis])
-idx_train = torch.LongTensor(idx_train)
-idx_val = torch.LongTensor(idx_val)
-idx_test = torch.LongTensor(idx_test)
+@torch.no_grad()
+def test():
+    model.eval()
+    logits = model(data,data_corrupt)
+    pred_test = logits[mask_train]
+    train_loss=loss(pred_test,label_train)
+#   acc1 = pred1.eq( torch.cat((torch.ones(40), torch.zeros(40)), 0).type(torch.LongTensor)[torch.cat((data.train_mask,data.train_mask),0).type(torch.LongTensor)]).sum().item() / mask1.sum().item()
+    pred_test = logits[mask_test]
+    test_loss=loss(pred_test,label_test)
+  
+#   acc = pred.eq( torch.cat((torch.ones(40), torch.zeros(40)), 0).type(torch.LongTensor)[torch.cat((data.test_mask,data.test_mask),0).type(torch.LongTensor)]).sum().item() / mask.sum().item()
 
-model = DGI(ft_size, hid_units, nonlinearity)
-optimiser = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=l2_coef)
+    return train_loss,test_loss
 
-if torch.cuda.is_available():
-    print('Using CUDA')
-    model.cuda()
-    features = features.cuda()
-    if sparse:
-        sp_adj = sp_adj.cuda()
-    else:
-        adj = adj.cuda()
-    labels = labels.cuda()
-    idx_train = idx_train.cuda()
-    idx_val = idx_val.cuda()
-    idx_test = idx_test.cuda()
-
-b_xent = nn.BCEWithLogitsLoss()
-xent = nn.CrossEntropyLoss()
-cnt_wait = 0
-best = 1e9
-best_t = 0
-
-for epoch in range(nb_epochs):
-    model.train()
-    optimiser.zero_grad()
-
-    idx = np.random.permutation(nb_nodes)
-    shuf_fts = features[:, idx, :]
-
-    lbl_1 = torch.ones(batch_size, nb_nodes)
-    lbl_2 = torch.zeros(batch_size, nb_nodes)
-    lbl = torch.cat((lbl_1, lbl_2), 1)
-
-    if torch.cuda.is_available():
-        shuf_fts = shuf_fts.cuda()
-        lbl = lbl.cuda()
-    
-    logits = model(features, shuf_fts, sp_adj if sparse else adj, sparse, None, None, None) 
-
-    loss = b_xent(logits, lbl)
-
-    print('Loss:', loss)
-
-    if loss < best:
-        best = loss
-        best_t = epoch
-        cnt_wait = 0
-        torch.save(model.state_dict(), 'best_dgi.pkl')
-    else:
-        cnt_wait += 1
-
-    if cnt_wait == patience:
-        print('Early stopping!')
-        break
-
-    loss.backward()
-    optimiser.step()
-
-print('Loading {}th epoch'.format(best_t))
-model.load_state_dict(torch.load('best_dgi.pkl'))
-
-embeds, _ = model.embed(features, sp_adj if sparse else adj, sparse, None)
-train_embs = embeds[0, idx_train]
-val_embs = embeds[0, idx_val]
-test_embs = embeds[0, idx_test]
-
-train_lbls = torch.argmax(labels[0, idx_train], dim=1)
-val_lbls = torch.argmax(labels[0, idx_val], dim=1)
-test_lbls = torch.argmax(labels[0, idx_test], dim=1)
-
-tot = torch.zeros(1)
-tot = tot.cuda()
-
-accs = []
-
-for _ in range(50):
-    log = LogReg(hid_units, nb_classes)
-    opt = torch.optim.Adam(log.parameters(), lr=0.01, weight_decay=0.0)
-    log.cuda()
-
-    pat_steps = 0
-    best_acc = torch.zeros(1)
-    best_acc = best_acc.cuda()
-    for _ in range(100):
-        log.train()
-        opt.zero_grad()
-
-        logits = log(train_embs)
-        loss = xent(logits, train_lbls)
-        
-        loss.backward()
-        opt.step()
-
-    logits = log(test_embs)
-    preds = torch.argmax(logits, dim=1)
-    acc = torch.sum(preds == test_lbls).float() / test_lbls.shape[0]
-    accs.append(acc * 100)
-    print(acc)
-    tot += acc
-
-print('Average accuracy:', tot / 50)
-
-accs = torch.stack(accs)
-print(accs.mean())
-print(accs.std())
-
+for epoch in range(1, epochs):
+    train()
+    train_loss,test_loss = test()
+    print(f'Epoch: {epoch:02d}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}')
