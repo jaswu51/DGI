@@ -1,6 +1,12 @@
-# This repo has forked DGI, but extended from GCN embeddings to GAT embeddings
+# Notes
 
-We will see the edge has been allowed for 2-dimension features.
+## This repo has forked DGI, but extended from GCN embeddings to GAT embeddings successfully. 
+
+The GAT algorithm has allows the edges to have 2-dimension features, weight and label.
+
+## It is a GAT+Discriminator structure. Two neural network are trained together as one.
+
+For now it does not have the: feature normalization's considerations. In a nutshell, it works on AvenueSampleData.txt, but it needs to be refined. 
 
 
 And the GAT has benefited from the multi-head attention algorithms.
