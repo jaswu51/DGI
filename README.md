@@ -1,4 +1,4 @@
-# This repo has extended DGI from GCN embeddings to GAT embeddings
+# This repo has forked DGI, but extended from GCN embeddings to GAT embeddings
 
 We will see the edge has been allowed for 2-dimension features.
 
