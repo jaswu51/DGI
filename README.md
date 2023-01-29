@@ -1,6 +1,6 @@
 # Notes
 
-## This repo has forked DGI, but extended from GCN embeddings to GAT embeddings successfully. 
+## This repo has forked DGI, but extended from GCN embeddings to GAT embeddings. 
 
 The GAT algorithm has allows the edges to have 2-dimension features, weight and label.
 
