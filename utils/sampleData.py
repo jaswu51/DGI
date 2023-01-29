@@ -42,7 +42,7 @@ from torch_geometric.utils import degree
 import random
 
 # read text file into pandas DataFrame
-df = pd.read_csv("data/Ave.txt", sep=",",header=0)
+df = pd.read_csv("data/AvenueSampleData.txt", sep=",",header=0)
 
 # preprocessing the df
 namelist=  ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
